@@ -46,6 +46,7 @@ void *mem_alloc(unsigned long size);
 int mem_free(void *ptr, unsigned long size);
 int mem_destroy();
 uint8_t prochaine_puissance(unsigned long size);
+void afficher();
 
 #ifdef __cplusplus
 }

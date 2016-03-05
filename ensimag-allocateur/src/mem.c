@@ -27,6 +27,14 @@ void * tzl[21];
 uint8_t prochaine_puissance(unsigned long size);
 void decoupage(void * adr_zone_libre, uint8_t puiss_courante, uint8_t puiss_cherchee);
 
+
+void afficher(){
+  for (int i=0; i<20; i++){
+    printf("%i, adresse: %x\n", i, tzl[i]);
+    // printf("coucou");
+  }
+}
+
     int 
 mem_init()
 {
