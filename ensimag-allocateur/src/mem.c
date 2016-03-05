@@ -131,3 +131,12 @@ uint8_t prochaine_puissance(unsigned long size)
     }
     return puissance;
 }
+
+void * get_adr_buddy(void * adr_courante, unsigned long size)
+{
+    uint64_t adr_courante_in_int = (uint64_t)adr_courante; 
+    uint64_t zone_memoire_in_int = (uint64_t)zone_memoire; 
+    //void * adr_prochain_bloc = (void *)adr_in_int;
+    void * adr_buddy = (void *)(adr_courante_in_int^zone_memoire_in_int);
+    return adr_buddy;
+}
