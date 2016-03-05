@@ -26,11 +26,21 @@ void * tzl[21];
 //fonctions statiques
 uint8_t prochaine_puissance(unsigned long size);
 void decoupage(void * adr_zone_libre, uint8_t puiss_courante, uint8_t puiss_cherchee);
+void * get_adr_buddy(void * adr_courante, uint8_t puiss);
 
 
 void afficher(){
   for (int i=0; i<20; i++){
     printf("%i, adresse: %x\n", i, tzl[i]);
+    printf("parcours de la liste: \n");
+    void * liste_tmp = tzl[i];
+    while(liste_tmp != NULL)
+    {
+        printf("adresse: %x\n", (uint64_t)liste_tmp - (uint64_t)zone_memoire);
+        printf("adresse du buddy: %x\n", (uint64_t)get_adr_buddy(liste_tmp, i) - (uint64_t)zone_memoire);
+        struct header h = *((struct header *)liste_tmp);
+        liste_tmp = h.suivant;
+    }
     // printf("coucou");
   }
 }
@@ -111,10 +121,8 @@ void decoupage(void * adr_zone_libre, uint8_t puiss_courante, uint8_t puiss_cher
     if(puiss_courante != puiss_cherchee) 
     {
         //adresse du bloc de taille 2^(p-1)
-        printf("décalage en hexa: %x\n", 1<<puiss_courante);
-        uint64_t adr_in_int = (uint64_t)adr_zone_libre + (1<<puiss_courante);
+        uint64_t adr_in_int = (uint64_t)adr_zone_libre + (1<<(puiss_courante-1));
         void * adr_prochain_bloc = (void *)adr_in_int;
-        printf("nouvelle adresse: %x\n", adr_prochain_bloc);
 
         //ajout en tête de tzl[p-1]
         struct header h;
@@ -140,11 +148,17 @@ uint8_t prochaine_puissance(unsigned long size)
     return puissance;
 }
 
-void * get_adr_buddy(void * adr_courante, unsigned long size)
+void * get_adr_buddy(void * adr_courante, uint8_t puiss)
 {
-    uint64_t adr_courante_in_int = (uint64_t)adr_courante; 
-    uint64_t zone_memoire_in_int = (uint64_t)zone_memoire; 
+    uint64_t adr_courante_in_int = (uint64_t)adr_courante - (uint64_t)zone_memoire; 
+    uint64_t rapport = adr_courante_in_int >> puiss; 
+    uint64_t adr_buddy_in_int = adr_courante_in_int;
+    printf("adr_courante_in_int: %i, puiss: %i, rapport: %i\n", adr_courante_in_int, puiss, rapport);
+    if(rapport%2 == 0) //pair
+        adr_buddy_in_int += (1<<puiss); 
+    else
+        adr_buddy_in_int -= (1<<puiss);
+    adr_buddy_in_int += (uint64_t)zone_memoire;
     //void * adr_prochain_bloc = (void *)adr_in_int;
-    void * adr_buddy = (void *)(adr_courante_in_int^zone_memoire_in_int);
-    return adr_buddy;
+    return (void *)adr_buddy_in_int;
 }

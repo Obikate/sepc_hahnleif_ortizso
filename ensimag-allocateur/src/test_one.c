@@ -4,7 +4,7 @@
 void main()
 {
     mem_init();
-    mem_alloc(262144);
+    mem_alloc(131072);
     afficher();
     mem_destroy();
 }
