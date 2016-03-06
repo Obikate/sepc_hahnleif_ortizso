@@ -81,6 +81,7 @@ void random_run_cpp(int nb=100, bool verbose=false)
   vector<allocat> liste_allocation;
     
   /* choisir les allocations */
+  //fillList_fibo<ALLOC_MEM_SIZE> ( liste_allocation );
   fillList_fibo<ALLOC_MEM_SIZE> ( liste_allocation );
     
   /* afficher l'etat de la memoire */
@@ -95,4 +96,3 @@ void random_run_cpp(int nb=100, bool verbose=false)
   for_each ( liste_allocation.begin (), liste_allocation.end (), doLiberer ());
   
 }
-
