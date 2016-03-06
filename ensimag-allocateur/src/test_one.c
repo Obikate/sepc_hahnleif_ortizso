@@ -4,7 +4,9 @@
 void main()
 {
     mem_init();
-    mem_alloc(131072);
+    void * add = mem_alloc(131072);
+    printf("add: %x\n", add);
+    mem_alloc(2020);
     afficher();
     mem_destroy();
 }

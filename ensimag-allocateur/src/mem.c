@@ -30,19 +30,22 @@ void * get_adr_buddy(void * adr_courante, uint8_t puiss);
 
 
 void afficher(){
-  for (int i=0; i<20; i++){
-    printf("%i, adresse: %x\n", i, tzl[i]);
-    printf("parcours de la liste: \n");
-    void * liste_tmp = tzl[i];
-    while(liste_tmp != NULL)
-    {
-        printf("adresse: %x\n", (uint64_t)liste_tmp - (uint64_t)zone_memoire);
-        printf("adresse du buddy: %x\n", (uint64_t)get_adr_buddy(liste_tmp, i) - (uint64_t)zone_memoire);
-        struct header h = *((struct header *)liste_tmp);
-        liste_tmp = h.suivant;
+    for (int i=0; i<20; i++){
+        if(tzl[i] != NULL)
+        {
+//            printf("%i, adresse: %x\n", i, tzl[i]);
+            printf("parcours de la liste: \n");
+            void * liste_tmp = tzl[i];
+            while(liste_tmp != NULL)
+            {
+ //               printf("adresse: %x\n", (uint64_t)liste_tmp - (uint64_t)zone_memoire);
+  //              printf("adresse du buddy: %x\n", (uint64_t)get_adr_buddy(liste_tmp, i) - (uint64_t)zone_memoire);
+                struct header h = *((struct header *)liste_tmp);
+                liste_tmp = h.suivant;
+            }
+            printf("\n");
+        }
     }
-    // printf("coucou");
-  }
 }
 
     int 
@@ -82,20 +85,17 @@ mem_alloc(unsigned long size)
     uint8_t p = k;
     while(tzl[p] == NULL)
     {
-       p++; 
+        p++; 
     }
-    printf("première liste non-nulle: %i\n", p);
     //récupération de la tête de liste
     void * adr_zone_libre = tzl[p];
     struct header h = *((struct header *)tzl[p]);
-    printf("Taille de zone récupérée: %i\n", h.taille);
     //mise à jour du tableau de listes
     tzl[p] = h.suivant;
     //on découpe récursivement la zone libre jusqu'à ce qu'on tombe
     //sur la bonne taille
-    printf("adresse de base: %x\n", adr_zone_libre);
     decoupage(adr_zone_libre, p, k);
-    return 0;
+    return adr_zone_libre;
 }
 
     int 
@@ -153,7 +153,6 @@ void * get_adr_buddy(void * adr_courante, uint8_t puiss)
     uint64_t adr_courante_in_int = (uint64_t)adr_courante - (uint64_t)zone_memoire; 
     uint64_t rapport = adr_courante_in_int >> puiss; 
     uint64_t adr_buddy_in_int = adr_courante_in_int;
-    printf("adr_courante_in_int: %i, puiss: %i, rapport: %i\n", adr_courante_in_int, puiss, rapport);
     if(rapport%2 == 0) //pair
         adr_buddy_in_int += (1<<puiss); 
     else
