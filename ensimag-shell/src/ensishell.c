@@ -24,29 +24,94 @@
 #if USE_GUILE == 1
 #include <libguile.h>
 
+
+typedef struct bg_children{
+  pid_t pid;
+  struct bg_children * next;
+
+} bg_children_t;
+
+bg_children_t *liste_children_bg;
+
+
+void add_bg(bg_children_t ** head, pid_t pid_a_ajouter){
+  bg_children_t * new_bg_children;
+  new_bg_children=malloc(sizeof(bg_children_t));
+
+  new_bg_children->pid=pid_a_ajouter;
+  new_bg_children->next=*head;
+  *head=new_bg_children;
+
+}
+
+void print_bg(bg_children_t *head){
+  bg_children_t * tmp=head;
+  while(tmp!=NULL){
+    printf("%d\n", tmp->pid);
+    tmp=tmp->next;
+  }
+}
+
+void remove_bg(bg_children_t **head, pid_t pid){
+  bg_children_t *tmp=*head;
+  bg_children_t *tmp2=*head;
+  if (tmp->pid==pid)
+    *head=tmp->next;
+  else {
+    tmp2=tmp->next;
+    while (tmp2!=NULL && tmp2->pid!=pid){
+      tmp=tmp2;
+      tmp2=tmp2->next;
+      }
+   }
+  if (tmp2!=NULL){
+    tmp->next=tmp2->next;
+  free(tmp2);
+  }
+}
+
+void update_bg(bg_children_t **head){
+    bg_children_t * tmp=*head;
+  
+  while(tmp!=NULL){
+    int status;
+    pid_t child = waitpid(tmp->pid, &status, WNOHANG);
+    if(child == 0){
+      O//n ne fait rien l'enfant est encore en vie \n
+    }else{
+      remove_bg(&liste_children_bg, tmp->pid);
+    }
+    tmp=tmp->next;
+
+  }
+}
+  
+
 int executer(char *line)
 {
-	/* Insert your code to execute the command line
-	 * identically to the standard execution scheme:
-	 * parsecmd, then fork+execvp, for a single command.
-	 * pipe and i/o redirection are not required.
-	 */
-    struct cmdline *l = parsecmd(& line);
-    pid_t child  = fork();
-    if(child == 0) //c'est le fils
+  /* Insert your code to execute the command line
+   * identically to the standard execution scheme:
+   * parsecmd, then fork+execvp, for a single command.
+   * pipe and i/o redirection are not required.
+   */
+  struct cmdline *l = parsecmd(& line);
+  pid_t child  = fork();
+  if(child == 0) //c'est le fils
     {
-        execvp(l->seq[0][0], l->seq[0]);
+      execvp(l->seq[0][0], l->seq[0]);
     } 
-    //il s'agit du père
-    int return_status;
-    if(!l->bg)
-        waitpid(child, &return_status, 0);
-	 //printf("Not implemented: can not execute %s\n", line);
-
-	/* Remove this line when using parsecmd as it will free it */
-	free(line);
+  //il s'agit du père
+  int return_status;
+  if(l->bg){
+    add_bg(&liste_children_bg,child);
+  }else{
+  waitpid(child, &return_status, 0);
+  //printf("Not implemented: can not execute %s\n", line);
+ }
+/* Remove this line when using parsecmd as it will free it */
+free(line);
 	
-	return 0;
+return 0;
 }
 
 SCM executer_wrapper(SCM x)
@@ -91,6 +156,10 @@ int main() {
 			terminate(line);
 		}
 
+		if(!strncmp(line,"jobs",4)) {
+		  print_bg(liste_children_bg);
+		  }
+
 #ifdef USE_GNU_READLINE
 		add_history(line);
 #endif
@@ -106,8 +175,9 @@ int main() {
                         continue;
                 }
 #endif
-
+      update_bg(&liste_children_bg);
       executer(line);
+      
 		/* parsecmd free line and set it up to 0 */
 		//l = parsecmd( & line);
 
