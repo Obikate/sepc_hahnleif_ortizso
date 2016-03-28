@@ -31,6 +31,7 @@ char *readline(char *prompt)
 #else
 #include <readline/readline.h>
 #include <readline/history.h>
+#include <sys/wait.h>
 
 #endif
 
