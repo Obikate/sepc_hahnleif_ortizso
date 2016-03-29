@@ -243,7 +243,7 @@ struct cmdline *parsecmd(char **pline)
 	seq_len = 0;
 
 	words = split_in_words(line);
-	free(line);
+    free(line);
 	*pline = NULL;
 
 	if (!s)

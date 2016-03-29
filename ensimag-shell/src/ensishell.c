@@ -107,23 +107,22 @@ char * word_expansion(char * line)
         cmd_offset += strlen(result.we_wordv[i]);
         cmd_offset++; //derrière chaque commande, il y a un espace
     }
-    cmd_offset--;
+    //cmd_offset--;
 
     char * max_cmd = malloc(sizeof(char)*cmd_offset);
+    //initialisation à '\0'
     for(int i=0; i<cmd_offset; i++)
         max_cmd[i] = '\0';
     int tmp_cmd_offset = 0;
     //on fait la recopie
     for(int i=0; tmp_cmd_offset<cmd_offset; i++)
     {
-        tmp_cmd_offset += strlen(result.we_wordv[i]);
         strcat(max_cmd, result.we_wordv[i]);
-        if(tmp_cmd_offset < cmd_offset)
-            max_cmd[tmp_cmd_offset++] = ' ';
+        tmp_cmd_offset += (int)strlen(result.we_wordv[i]);
+        max_cmd[tmp_cmd_offset++] = ' ';
     }
-    //max_cmd[--cmd_offset] = '\0';
-    if(result.we_wordv != NULL)
-        wordfree(&result);
+    max_cmd[cmd_offset] = '\0';
+    wordfree(&result);
     return max_cmd;
 }
 
@@ -136,6 +135,7 @@ int executer(char *line)
      */
    //struct cmdline *l = parsecmd(& line);
     char * new_line = word_expansion(line);
+    //printf("new_line: %x\n", (int)new_line);
 
     struct cmdline *l = parsecmd( &new_line);
     pid_t child1, child2;
