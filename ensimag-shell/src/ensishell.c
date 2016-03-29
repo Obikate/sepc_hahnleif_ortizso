@@ -11,6 +11,8 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <signal.h>
+#include <sys/wait.h>
 
 #include "variante.h"
 #include "readcmd.h"
@@ -31,6 +33,7 @@
 
 typedef struct bg_children{
     pid_t pid;
+    char name[10];
     struct bg_children * next;
 
 } bg_children_t;
@@ -38,20 +41,21 @@ typedef struct bg_children{
 bg_children_t *liste_children_bg;
 
 
-void add_bg(bg_children_t ** head, pid_t pid_a_ajouter){
+void add_bg(bg_children_t ** head, pid_t pid_a_ajouter, char * name_a_ajouter){
     bg_children_t * new_bg_children;
     new_bg_children=malloc(sizeof(bg_children_t));
 
     new_bg_children->pid=pid_a_ajouter;
+    strcpy(new_bg_children->name, name_a_ajouter);
     new_bg_children->next=*head;
     *head=new_bg_children;
-
 }
 
 void print_bg(bg_children_t *head){
     bg_children_t * tmp=head;
     while(tmp!=NULL){
-        printf("%d\n", tmp->pid);
+        printf("%s\n", tmp->name);
+        //printf("%d\n", tmp->pid);
         tmp=tmp->next;
     }
 }
@@ -100,6 +104,7 @@ int executer(char *line)
      */
     struct cmdline *l = parsecmd(& line);
     pid_t child1, child2;
+    int tube[2];
     if(l->seq[0] != NULL && l->seq[1] == NULL)
     {
         child1 = fork();
@@ -123,17 +128,16 @@ int executer(char *line)
         
     } else if(l->seq[0] != NULL && l->seq[1] != NULL)
     {
-        int tube[2];
         pipe(tube);
         if((child1=fork()) == 0)
         {
-            //if(l->out != NULL)
-            //{
-            //    mode_t mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
-            //    int fd = open(l->out, O_RDWR|O_APPEND|O_CREAT, mode);
-            //    dup2(fd, 1);
-            //    close(fd);
-            //}
+            if(l->out != NULL)
+            {
+                mode_t mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
+                int fd = open(l->out, O_RDWR|O_APPEND|O_CREAT, mode);
+                dup2(fd, 1);
+                close(fd);
+            }
             dup2(tube[0], 0);
             close(tube[1]);
             close(tube[0]);
@@ -141,32 +145,34 @@ int executer(char *line)
         }
         if((child2=fork()) == 0)
         {
-            //if(l->in != NULL)
-            //{
-            //    int fd = open(l->in, O_RDONLY);
-            //    dup2(fd, 0);
-            //    close(fd);
-            //}
+            if(l->in != NULL)
+            {
+                int fd = open(l->in, O_RDONLY);
+                dup2(fd, 0);
+                close(fd);
+            }
             dup2(tube[1], 1);
             close(tube[1]);
             close(tube[0]);
             execvp(l->seq[0][0], l->seq[0]);
         }
+        close(tube[0]);
+        close(tube[1]);
     }
     //il s'agit du père
     int return_status;
     if(l->bg){
-        add_bg(&liste_children_bg,child1);
-        add_bg(&liste_children_bg,child2);
-    }else{
-        if(l->seq[1] == NULL)
+        add_bg(&liste_children_bg, child1, l->seq[0][0]);
+        if(l->seq[1] != NULL)
+            add_bg(&liste_children_bg, child2, l->seq[1][0]);
+    } else {
+        if(child1 != 0)
             waitpid(child1, &return_status, 0);
-        else
-            waitpid(child1, &return_status, 0);
+        if(child2 != 0)
+            waitpid(child2, &return_status, 0);
     }
     /* Remove this line when using parsecmd as it will free it */
-    free(line);
-
+    //free(line);
     return 0;
 }
 
