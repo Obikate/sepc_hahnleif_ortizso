@@ -13,6 +13,7 @@
 #include <sys/stat.h>
 #include <signal.h>
 #include <sys/wait.h>
+#include <wordexp.h>
 
 #include "variante.h"
 #include "readcmd.h"
@@ -94,6 +95,37 @@ void update_bg(bg_children_t **head){
     }
 }
 
+char * word_expansion(char * line)
+{
+    wordexp_t result;
+    wordexp(line, &result, 0);
+    free(line);
+    int cmd_offset = 0;
+    //on calcule la longueur de la nouvelle commande
+    for(int i=0; i<result.we_wordc; i++)
+    {
+        cmd_offset += strlen(result.we_wordv[i]);
+        cmd_offset++; //derrière chaque commande, il y a un espace
+    }
+    cmd_offset--;
+
+    char * max_cmd = malloc(sizeof(char)*cmd_offset);
+    for(int i=0; i<cmd_offset; i++)
+        max_cmd[i] = '\0';
+    int tmp_cmd_offset = 0;
+    //on fait la recopie
+    for(int i=0; tmp_cmd_offset<cmd_offset; i++)
+    {
+        tmp_cmd_offset += strlen(result.we_wordv[i]);
+        strcat(max_cmd, result.we_wordv[i]);
+        if(tmp_cmd_offset < cmd_offset)
+            max_cmd[tmp_cmd_offset++] = ' ';
+    }
+    //max_cmd[--cmd_offset] = '\0';
+    if(result.we_wordv != NULL)
+        wordfree(&result);
+    return max_cmd;
+}
 
 int executer(char *line)
 {
@@ -102,7 +134,10 @@ int executer(char *line)
      * parsecmd, then fork+execvp, for a single command.
      * pipe and i/o redirection are not required.
      */
-    struct cmdline *l = parsecmd(& line);
+   //struct cmdline *l = parsecmd(& line);
+    char * new_line = word_expansion(line);
+
+    struct cmdline *l = parsecmd( &new_line);
     pid_t child1, child2;
     int tube[2];
     if(l->seq[0] != NULL && l->seq[1] == NULL)
