@@ -95,11 +95,80 @@ void update_bg(bg_children_t **head){
     }
 }
 
+//return 1 if the last non-space character of the string is equal to car
+int last_char(char * str, char car)
+{
+    int count = 0;
+    while(str[count] != '\0' && str[count] != car)
+        count++;
+    if(str[count] == '\0')
+        return 0;
+    //we're not at the end of the string and recognized the caracter
+    count++;
+    while(str[count] != '\0')
+    {
+        if(str[count] != ' ')
+            return 0;
+    }
+    //we're at the end of the string
+    return 1;
+}
+
+char * replace_char(char * str, char * delim)
+{
+    //on trouve la longueur du nouveau string
+    int new_length = 0;
+    int str_length = 0;
+    int bg_check = 0;
+    for(int i=0; str[i] != '\0'; i++)
+    {
+        if(str[i] == delim[0])
+            new_length += 2; //on va ajouter deux " si on tombe sur le caractère
+        new_length++;
+        str_length++;
+    }
+    new_length++; //pour le caractère de fin '\0'
+    //cas spécial pour delim[0] == '&', car à la fin de la commande
+    if(delim[0] == '&' && last_char(str, '&') == 1)
+    {
+        new_length += 2;
+        bg_check = 1;
+    }
+    char * new_str = malloc(sizeof(char)*new_length);
+    //initialisation du nouveau string
+    for(int i=0; i<new_length; i++)
+        new_str[i] = '\0';
+    char * token = strtok(str, delim);
+    while(token)
+    {
+        strcat(new_str, token);
+        //puts(token);
+        token = strtok(NULL, delim);
+        if(token != NULL)
+        {
+            strcat(new_str, "\"");
+            strcat(new_str, delim);
+            strcat(new_str, "\"");
+        }
+    }
+    if(bg_check == 1)
+    {
+        strcat(new_str, "\"&\"");
+    }
+    free(str);
+    return new_str;
+}
+
 char * word_expansion(char * line)
 {
+    //on traite les caractères spéciaux
+    char * new_line = replace_char(line, "|");
+    char * new_line_2 = replace_char(new_line, "<");
+    char * new_line_3 = replace_char(new_line_2, ">");
+    char * new_line_4 = replace_char(new_line_3, "&");
     wordexp_t result;
-    wordexp(line, &result, 0);
-    free(line);
+    wordexp(new_line_4, &result, 0);
+    free(new_line_4);
     int cmd_offset = 0;
     //on calcule la longueur de la nouvelle commande
     for(int i=0; i<result.we_wordc; i++)
@@ -126,6 +195,107 @@ char * word_expansion(char * line)
     return max_cmd;
 }
 
+int is_in_the_middle(struct cmdline * l, int i)
+{
+    return (i > 0 && l->seq[i+1] != NULL);
+}
+
+void pipe_multiple(struct cmdline * l)
+{
+    int return_status;
+    pid_t child;
+    int tube1[2];
+    int tube2[2];
+    int child_number=0;
+    //pour pouvoir attendre tous les fils à la fin du pipe multiple, on 
+    //sauvegarde les pid pour les attendre à la fin
+    int nb_child = 0;
+    while(l->seq[nb_child] != NULL)
+        nb_child++;
+    pid_t pid_child[nb_child];
+
+    while(l->seq[child_number] != NULL)
+    {
+        if(child_number%2 == 0)
+            pipe(tube1);
+        else
+            pipe(tube2);
+        if((child=fork()) == 0) //il s'agit d'un fils
+        {
+            if(child_number == 0) //on pourrait avoir une entrée à partir d'un fichier
+            {
+                if(l->in != NULL)
+                {
+                    int fd = open(l->in, O_RDONLY);
+                    dup2(fd, 0);
+                    close(fd);
+                }
+                dup2(tube1[1], 1);
+                close(tube1[0]);
+                close(tube1[1]);
+            } else if(is_in_the_middle(l, child_number)) {
+                //au milieu
+                if(child_number%2 == 0)
+                {
+                    dup2(tube2[0], 0);
+                    dup2(tube1[1], 1);
+                } else {
+                    dup2(tube1[0], 0);
+                    dup2(tube2[1], 1);
+                }
+                close(tube1[0]);
+                close(tube1[1]);
+                close(tube2[0]);
+                close(tube2[1]);
+            } else { //il s'agit de la fin des commandes
+                if(l->out != NULL)
+                {
+                    mode_t mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
+                    int fd = open(l->out, O_RDWR|O_APPEND|O_CREAT, mode);
+                    dup2(fd, 1);
+                    close(fd);
+                }
+                if(child_number%2 == 0)
+                {
+                    dup2(tube2[0], 0);
+                    close(tube2[0]);
+                    close(tube2[1]);
+                }
+                else
+                {
+                    dup2(tube1[0], 0);
+                    close(tube1[0]);
+                    close(tube1[1]);
+                }
+            }
+            execvp(l->seq[child_number][0], l->seq[child_number]);
+        }
+        if(child_number == 0 || is_in_the_middle(l, child_number))
+        {
+            if(child_number%2 == 0)
+            {
+                close(tube1[1]);
+                if(child_number > 0)
+                    close(tube2[0]);
+            } else {
+                close(tube2[1]);
+                if(child_number > 0)
+                    close(tube1[0]);
+            }
+        }
+        pid_child[child_number] = child;
+        child_number++;
+    }
+    if(l->bg)
+    {
+        for(int i=0; i<nb_child; i++)
+            add_bg(&liste_children_bg, pid_child[i], l->seq[i][0]);
+    } else {
+        for(int i=0; i<nb_child; i++)
+            waitpid(pid_child[i], &return_status, 0);
+    }
+}
+
 int executer(char *line)
 {
     /* Insert your code to execute the command line
@@ -133,17 +303,14 @@ int executer(char *line)
      * parsecmd, then fork+execvp, for a single command.
      * pipe and i/o redirection are not required.
      */
-   //struct cmdline *l = parsecmd(& line);
     char * new_line = word_expansion(line);
-    //printf("new_line: %x\n", (int)new_line);
 
     struct cmdline *l = parsecmd( &new_line);
-    pid_t child1, child2;
-    int tube[2];
+    pid_t child;
     if(l->seq[0] != NULL && l->seq[1] == NULL)
     {
-        child1 = fork();
-        if(child1 == 0) //c'est le fils
+        child = fork();
+        if(child == 0) //c'est le fils
         {
             if(l->in != NULL)
             {
@@ -160,54 +327,16 @@ int executer(char *line)
             }
             execvp(l->seq[0][0], l->seq[0]);
         } 
-        
-    } else if(l->seq[0] != NULL && l->seq[1] != NULL)
-    {
-        pipe(tube);
-        if((child1=fork()) == 0)
-        {
-            if(l->out != NULL)
-            {
-                mode_t mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
-                int fd = open(l->out, O_RDWR|O_APPEND|O_CREAT, mode);
-                dup2(fd, 1);
-                close(fd);
-            }
-            dup2(tube[0], 0);
-            close(tube[1]);
-            close(tube[0]);
-            execvp(l->seq[1][0], l->seq[1]);
-        }
-        if((child2=fork()) == 0)
-        {
-            if(l->in != NULL)
-            {
-                int fd = open(l->in, O_RDONLY);
-                dup2(fd, 0);
-                close(fd);
-            }
-            dup2(tube[1], 1);
-            close(tube[1]);
-            close(tube[0]);
-            execvp(l->seq[0][0], l->seq[0]);
-        }
-        close(tube[0]);
-        close(tube[1]);
+    } else if(l->seq[0] != NULL && l->seq[1] != NULL) {
+        pipe_multiple(l);
     }
     //il s'agit du père
     int return_status;
     if(l->bg){
-        add_bg(&liste_children_bg, child1, l->seq[0][0]);
-        if(l->seq[1] != NULL)
-            add_bg(&liste_children_bg, child2, l->seq[1][0]);
+        add_bg(&liste_children_bg, child, l->seq[0][0]);
     } else {
-        if(child1 != 0)
-            waitpid(child1, &return_status, 0);
-        if(child2 != 0)
-            waitpid(child2, &return_status, 0);
+        waitpid(child, &return_status, 0);
     }
-    /* Remove this line when using parsecmd as it will free it */
-    //free(line);
     return 0;
 }
 
