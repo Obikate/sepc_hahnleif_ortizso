@@ -8,6 +8,7 @@
 #include <complex.h>
 #include <stdbool.h>
 #include <unistd.h>
+#include <pthread.h>
 
 #include "tsp-types.h"
 #include "tsp-job.h"
@@ -21,7 +22,6 @@
 /* macro de mesure de temps, retourne une valeur en nanosecondes */
 #define TIME_DIFF(t1, t2) \
   ((t2.tv_sec - t1.tv_sec) * 1000000000ll + (long long int) (t2.tv_nsec - t1.tv_nsec))
-
 
 /* tableau des distances */
 tsp_distance_matrix_t tsp_distance ={};
@@ -39,6 +39,9 @@ int nb_threads=1;
 bool affiche_sol= false;
 bool affiche_progress=false;
 bool quiet=false;
+
+void * p_thread_function(void * arg);
+pthread_mutex_t mon_mutex;
 
 static void generate_tsp_jobs (struct tsp_queue *q, int hops, int len, uint64_t vpres, tsp_path_t path, long long int *cuts, tsp_path_t sol, int *sol_len, int depth)
 {
@@ -127,6 +130,10 @@ int main (int argc, char **argv)
     generate_tsp_jobs (&q, 1, 0, vpres, path, &cuts, sol, & sol_len, 3);
     no_more_jobs (&q);
    
+    printf("après avoir généré les travaux\n");
+    int p_thread_count = 0;
+    pthread_t pid;
+    pthread_mutex_init(&mon_mutex, NULL);
     /* calculer chacun des travaux */
     tsp_path_t solution;
     memset (solution, -1, MAX_TOWNS * sizeof (int));
@@ -135,6 +142,7 @@ int main (int argc, char **argv)
         int hops = 0, len = 0;
         get_job (&q, solution, &hops, &len, &vpres);
 	
+        pthread_create(&tid, NULL, p_thread_function, (void *)(&p_thread_count));
 	// le noeud est moins bon que la solution courante
 	if (minimum < INT_MAX
 	    && (nb_towns - hops) > 10
@@ -147,6 +155,7 @@ int main (int argc, char **argv)
 	tsp (hops, len, vpres, solution, &cuts, sol, &sol_len);
     }
     
+    pthread_mutex_destroy(&mon_mutex);
     clock_gettime (CLOCK_REALTIME, &t2);
 
     if (affiche_sol)
@@ -158,4 +167,13 @@ int main (int argc, char **argv)
 	   perf/1000000ll, perf%1000000ll, cuts);
 
     return 0 ;
+}
+
+void * p_thread_function(void * arg)
+{
+    pthread_mutex_lock(&mon_mutex);
+    printf("%i\n", *((int*)arg));
+    *((int*)arg) = *((int*)arg) + 1;
+    pthread_mutex_unlock(&mon_mutex);
+    return NULL;
 }
