@@ -109,17 +109,18 @@ int lower_bound_using_lp(tsp_path_t path, int hops, int len, uint64_t vpres) {
     switch(SOLVEUR) {
     case SOLVEUR_CBC:
       sol = popen("cbc toto.lp | tee toto.sol | grep 'Objective value'","r");
-      fscanf(sol, "Objective value: %lg",& val);
+      int error = fscanf(sol, "Objective value: %lg",& val);
+      error++;
       fclose(sol);
       break;
     case SOLVEUR_SYMPHONY:
       sol = popen("symphony -L toto.lp | tee toto.sol | grep \"Solution Cost: \"","r");
-      fscanf(sol, "Solution Cost: %lg",& val);
+      error = fscanf(sol, "Solution Cost: %lg",& val);
       fclose(sol);
       break;
     case SOLVEUR_GLPSOL:
       sol = popen("glpsol --lp toto.lp -o /dev/stdout | tee toto.sol | grep 'Objective:  L = '","r");
-      fscanf(sol, "Objective:  L =  %lg",& val);
+      error = fscanf(sol, "Objective:  L =  %lg",& val);
       fclose(sol);
       break;
     case SOLVEUR_NONE:
