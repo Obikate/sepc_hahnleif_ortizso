@@ -23,6 +23,19 @@
 #define TIME_DIFF(t1, t2) \
   ((t2.tv_sec - t1.tv_sec) * 1000000000ll + (long long int) (t2.tv_nsec - t1.tv_nsec))
 
+
+struct file_tid{
+  pthread_t tid_actuel;
+  pthread_t *suiv;
+  pthread_t *head;
+  pthread_t *tail;
+  int nb_tid;
+};
+typedef struct file_tid file_tid_t;
+
+void initialiser_file(file_tid_t *f_tid);
+void ajouter_tid(pthread_t * nouveau, file_tid_t *f_tid);
+
 /* tableau des distances */
 tsp_distance_matrix_t tsp_distance ={};
 
@@ -82,7 +95,9 @@ int main (int argc, char **argv)
     long long int cuts = 0;
     struct tsp_queue q;
     struct timespec t1, t2;
-
+    file_tid_t f_tid;
+    initialiser_file(&f_tid);
+    
     /* lire les arguments */
     int opt;
     while ((opt = getopt(argc, argv, "spq")) != -1) {
@@ -132,7 +147,7 @@ int main (int argc, char **argv)
    
     printf("après avoir généré les travaux\n");
     int p_thread_count = 0;
-    pthread_t pid;
+    pthread_t tid;
     pthread_mutex_init(&mon_mutex, NULL);
     /* calculer chacun des travaux */
     tsp_path_t solution;
@@ -143,6 +158,7 @@ int main (int argc, char **argv)
         get_job (&q, solution, &hops, &len, &vpres);
 	
         pthread_create(&tid, NULL, p_thread_function, (void *)(&p_thread_count));
+	ajouter_tid(&tid, &f_tid);
 	// le noeud est moins bon que la solution courante
 	if (minimum < INT_MAX
 	    && (nb_towns - hops) > 10
@@ -167,6 +183,28 @@ int main (int argc, char **argv)
 	   perf/1000000ll, perf%1000000ll, cuts);
 
     return 0 ;
+}
+
+void initialiser_file(file_tid_t *f_tid){
+  f_tid->suiv=NULL;
+  f_tid->head=NULL;
+  f_tid->tail=NULL;
+  f_tid->nb_tid=0;
+}
+
+void ajouter_tid(pthread_t * nouveau, file_tid_t *f_tid){
+  if (f_tid->head != NULL){
+    f_tid->suiv = nouveau;
+    f_tid->tail = nouveau;
+    f_tid->suiv=NULL;
+    f_tid->tid_actuel=*nouveau;
+    f_tid->nb_tid++;
+  }else{
+    f_tid->head=nouveau;
+    f_tid->tail =nouveau;
+    f_tid->tid_actuel=*nouveau;
+    f_tid->nb_tid=1;  
+  }
 }
 
 void * p_thread_function(void * arg)
