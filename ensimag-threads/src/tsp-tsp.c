@@ -72,9 +72,9 @@ void tsp (int hops, int len, uint64_t vpres, tsp_path_t path, long long int *cut
 
 void * pthread_tsp_eng(void * arg)
 {
-    pthread_mutex_lock(&super_mutex);
+    //pthread_mutex_lock(&super_mutex);
 	pthread_tsp(arg);
-    pthread_mutex_unlock(&super_mutex);
+    //pthread_mutex_unlock(&super_mutex);
 return NULL;
 }
 
@@ -86,24 +86,44 @@ void * pthread_tsp (void * arg)
 	uint64_t vpres = p_arg.vpres;
 	long long int *cuts = p_arg.cuts;
 	int *sol_len = p_arg.sol_len;
-    if (len + cutprefix[(nb_towns-hops)] >= minimum) {
+
+	
+    pthread_mutex_lock(&super_mutex);
+	int minimum_local = minimum;
+	int lp_res = lower_bound_using_hk(*p_arg.path, hops, len, vpres);
+    pthread_mutex_unlock(&super_mutex);
+
+    //if (len + cutprefix[(nb_towns-hops)] >= minimum) {
+    if (len + cutprefix[(nb_towns-hops)] >= minimum_local) {
+    pthread_mutex_lock(&super_mutex);
       (*cuts)++ ;
+    pthread_mutex_unlock(&super_mutex);
       return NULL;
     }
 
+
     /* calcul de l'arbre couvrant comme borne inférieure */
+//    if ((nb_towns - hops) > 6 &&
+//	lower_bound_using_hk(*p_arg.path, hops, len, vpres) >= minimum) {
     if ((nb_towns - hops) > 6 &&
-	lower_bound_using_hk(*p_arg.path, hops, len, vpres) >= minimum) {
+	lp_res >= minimum_local) {
+    pthread_mutex_lock(&super_mutex);
       (*cuts)++;
+    pthread_mutex_unlock(&super_mutex);
       return NULL;
     }
+
 
 
     /* un rayon de coupure à 15, pour ne pas lancer la programmation
        linéaire pour les petits arbres, plus rapide à calculer sans */
+//    if ((nb_towns - hops) > 22
+//	&& lower_bound_using_lp(*p_arg.path, hops, len, vpres) >= minimum) {
     if ((nb_towns - hops) > 22
-	&& lower_bound_using_lp(*p_arg.path, hops, len, vpres) >= minimum) {
+	&& lp_res >= minimum_local) {
+    pthread_mutex_lock(&super_mutex);
       (*cuts)++;
+    pthread_mutex_unlock(&super_mutex);
       return NULL;
     }
 
@@ -111,7 +131,7 @@ void * pthread_tsp (void * arg)
     if (hops == nb_towns) {
 	    int me = (*p_arg.path)[hops - 1];
 	    int dist = tsp_distance[me][0]; // retourner en 0
-            if ( len + dist < minimum ) {
+            if ( len + dist < minimum_local ) {
 		    minimum = len + dist;
 		    *sol_len = len + dist;
 		    memcpy(*p_arg.sol, *p_arg.path, nb_towns*sizeof(int));
