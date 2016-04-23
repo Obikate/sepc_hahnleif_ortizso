@@ -8,7 +8,6 @@
 #include <complex.h>
 #include <stdbool.h>
 #include <unistd.h>
-#include <pthread.h>
 
 #include "tsp-types.h"
 #include "tsp-job.h"
@@ -24,17 +23,49 @@
   ((t2.tv_sec - t1.tv_sec) * 1000000000ll + (long long int) (t2.tv_nsec - t1.tv_nsec))
 
 
-struct file_tid{
-  pthread_t tid_actuel;
-  pthread_t *suiv;
-  pthread_t *head;
-  pthread_t *tail;
-  int nb_tid;
+struct cell{
+  pthread_t id;
+  struct cell *suiv;
 };
-typedef struct file_tid file_tid_t;
+typedef struct cell cell_t;
+int taille_cell;
 
-void initialiser_file(file_tid_t *f_tid);
-void ajouter_tid(pthread_t * nouveau, file_tid_t *f_tid);
+void add_cell(cell_t ** head,pthread_t id_a_ajouter){
+    cell_t * new_cell;
+    new_cell=malloc(sizeof(cell_t));
+    new_cell->id=id_a_ajouter;
+    new_cell->suiv=*head;
+    *head=new_cell;
+    taille_cell++;
+}
+
+void print_cell(cell_t *head){
+    cell_t * tmp=head;
+    while(tmp!=NULL){
+      printf("%u ", (unsigned int)(tmp->id));
+        //printf("%d\n", tmp->pid);
+        tmp=tmp->suiv;
+    }
+    printf("\n");
+}
+
+void remove_cell(cell_t **head, pthread_t id){
+    cell_t *tmp=*head;
+    cell_t *tmp2=*head;
+    if (tmp->id==id)
+        *head=tmp->suiv;
+    else {
+        tmp2=tmp->suiv;
+        while (tmp2!=NULL && tmp2->id!=id){
+            tmp=tmp2;
+            tmp2=tmp2->suiv;
+        }
+    }
+    if (tmp2!=NULL){
+        tmp->suiv=tmp2->suiv;
+        free(tmp2);
+    }
+}
 
 /* tableau des distances */
 tsp_distance_matrix_t tsp_distance ={};
@@ -54,7 +85,6 @@ bool affiche_progress=false;
 bool quiet=false;
 
 void * p_thread_function(void * arg);
-pthread_mutex_t mon_mutex;
 
 static void generate_tsp_jobs (struct tsp_queue *q, int hops, int len, uint64_t vpres, tsp_path_t path, long long int *cuts, tsp_path_t sol, int *sol_len, int depth)
 {
@@ -95,9 +125,9 @@ int main (int argc, char **argv)
     long long int cuts = 0;
     struct tsp_queue q;
     struct timespec t1, t2;
-    file_tid_t f_tid;
-    initialiser_file(&f_tid);
-    
+    cell_t *head =NULL;
+    //cell_t *tail=NULL;
+    taille_cell=0;
     /* lire les arguments */
     int opt;
     while ((opt = getopt(argc, argv, "spq")) != -1) {
@@ -146,19 +176,33 @@ int main (int argc, char **argv)
     no_more_jobs (&q);
    
     printf("après avoir généré les travaux\n");
-    int p_thread_count = 0;
+    //int p_thread_count = 0;
     pthread_t tid;
-    pthread_mutex_init(&mon_mutex, NULL);
+    pthread_mutex_init(&super_mutex, NULL);
     /* calculer chacun des travaux */
     tsp_path_t solution;
     memset (solution, -1, MAX_TOWNS * sizeof (int));
     solution[0] = 0;
     while (!empty_queue (&q)) {
         int hops = 0, len = 0;
+
         get_job (&q, solution, &hops, &len, &vpres);
 	
-        pthread_create(&tid, NULL, p_thread_function, (void *)(&p_thread_count));
-	ajouter_tid(&tid, &f_tid);
+	pthread_arg_t p_arg;
+	p_arg.hops = hops;
+	p_arg.len = len;
+	p_arg.vpres = vpres;	
+	p_arg.path = &solution;	
+	p_arg.cuts = &cuts;	
+	p_arg.sol = &sol;	
+	p_arg.sol_len = &sol_len;	
+
+        pthread_create(&tid, NULL, pthread_tsp_eng, (void *)(&p_arg));
+	pthread_join(tid, NULL);
+        //pthread_create(&tid, NULL, p_thread_function, (void *)(&p_thread_count));
+	add_cell(&head, tid);
+	//	print_cell(head);
+	//printf("%d", taille_cell);
 	// le noeud est moins bon que la solution courante
 	if (minimum < INT_MAX
 	    && (nb_towns - hops) > 10
@@ -168,15 +212,17 @@ int main (int argc, char **argv)
 
 	  continue;
 
-	tsp (hops, len, vpres, solution, &cuts, sol, &sol_len);
+	//tsp (hops, len, vpres, solution, &cuts, sol, &sol_len);
+	//pthread_tsp((void*)(&p_arg));
     }
     
-    pthread_mutex_destroy(&mon_mutex);
+    pthread_mutex_destroy(&super_mutex);
     clock_gettime (CLOCK_REALTIME, &t2);
 
     if (affiche_sol)
       print_solution_svg (sol, sol_len);
 
+	print_solution(sol, sol_len);
     perf = TIME_DIFF (t1,t2);
     printf("<!-- # = %d seed = %ld len = %d threads = %d time = %lld.%03lld ms ( %lld coupures ) -->\n",
 	   nb_towns, myseed, sol_len, nb_threads,
@@ -185,33 +231,13 @@ int main (int argc, char **argv)
     return 0 ;
 }
 
-void initialiser_file(file_tid_t *f_tid){
-  f_tid->suiv=NULL;
-  f_tid->head=NULL;
-  f_tid->tail=NULL;
-  f_tid->nb_tid=0;
-}
 
-void ajouter_tid(pthread_t * nouveau, file_tid_t *f_tid){
-  if (f_tid->head != NULL){
-    f_tid->suiv = nouveau;
-    f_tid->tail = nouveau;
-    f_tid->suiv=NULL;
-    f_tid->tid_actuel=*nouveau;
-    f_tid->nb_tid++;
-  }else{
-    f_tid->head=nouveau;
-    f_tid->tail =nouveau;
-    f_tid->tid_actuel=*nouveau;
-    f_tid->nb_tid=1;  
-  }
-}
 
 void * p_thread_function(void * arg)
 {
-    pthread_mutex_lock(&mon_mutex);
-    printf("%i\n", *((int*)arg));
+    pthread_mutex_lock(&super_mutex);
+    //printf("%i\n", *((int*)arg));
     *((int*)arg) = *((int*)arg) + 1;
-    pthread_mutex_unlock(&mon_mutex);
+    pthread_mutex_unlock(&super_mutex);
     return NULL;
 }
