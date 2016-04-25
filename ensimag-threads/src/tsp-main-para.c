@@ -123,7 +123,10 @@ static void usage(const char *name) {
 
 static void * pthread_main(void * arg)
 {
+    pthread_mutex_lock(&super_mutex);
     pthread_arg_t p_arg = (*(pthread_arg_t*)arg);
+    pthread_mutex_unlock(&super_mutex);
+
     tsp_path_t solution; 
     tsp_path_t sol; 
     struct tsp_queue *q = p_arg.q;
@@ -275,6 +278,10 @@ static void * pthread_main(void * arg)
         pthread_t tid_tab[nb_threads];
         for(int i=0; i<nb_threads; i++)
         {
+
+            pthread_mutex_lock(&super_mutex);
+            p_arg.q = &(q_tab[i]);
+            pthread_mutex_unlock(&super_mutex);
             p_arg.q = &(q_tab[i]);
             pthread_create(&(tid_tab[i]), NULL, pthread_main, (void*)&p_arg);
         }
